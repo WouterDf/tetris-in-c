@@ -56,15 +56,14 @@ typedef struct Color
 /**************************************************************************
 ** Colors
 **************************************************************************/
-Color COLOR_DARK    = { 0x29, 0x29, 0x29, 0xFF };
-Color COLOR_BLACK   = { 0x00, 0x00, 0x00, 0xFF };
-Color COLOR_YELLOW  = { 246, 250, 112, 0xFF };
-Color COLOR_RED  = { 255, 0, 96, 0xFF };
-Color COLOR_GREEN  = { 0, 223, 162, 0xFF };
-Color COLOR_BLUE  = { 0, 121, 255, 0xFF };
+Color COLOR_DARK    = { 0x29,   0x29,   0x29,   0xFF };
+Color COLOR_BLACK   = { 0x00,   0x00,   0x00,   0xFF };
+Color COLOR_YELLOW  = { 246,    250,    112,    0xFF };
+Color COLOR_RED     = { 255,    0,      96,     0xFF };
+Color COLOR_GREEN   = { 0,      223,    162,    0xFF };
+Color COLOR_BLUE    = { 0,      121,    255,    0xFF };
 
-
-Color SHAPE_COLORS[7];
+Color SHAPE_COLORS[ 7 ];
 
 /**************************************************************************
 ** Forward references
@@ -78,13 +77,13 @@ int         randomInt( int min, int max );
 int
 main()
 {
-    SHAPE_COLORS[TETRIS_SHAPE_SQUARE]   = COLOR_YELLOW;
-    SHAPE_COLORS[TETRIS_SHAPE_T]        = COLOR_RED;
-    SHAPE_COLORS[TETRIS_SHAPE_LONG]     = COLOR_GREEN;
-    SHAPE_COLORS[TETRIS_SHAPE_S]        = COLOR_BLUE;
-    SHAPE_COLORS[TETRIS_SHAPE_Z]        = COLOR_YELLOW;
-    SHAPE_COLORS[TETRIS_SHAPE_J]        = COLOR_RED;
-    SHAPE_COLORS[TETRIS_SHAPE_L]        = COLOR_GREEN;
+    SHAPE_COLORS[ TETRIS_SHAPE_SQUARE ]   = COLOR_YELLOW;
+    SHAPE_COLORS[ TETRIS_SHAPE_T ]        = COLOR_RED;
+    SHAPE_COLORS[ TETRIS_SHAPE_LONG ]     = COLOR_GREEN;
+    SHAPE_COLORS[ TETRIS_SHAPE_S ]        = COLOR_BLUE;
+    SHAPE_COLORS[ TETRIS_SHAPE_Z ]        = COLOR_YELLOW;
+    SHAPE_COLORS[ TETRIS_SHAPE_J ]        = COLOR_RED;
+    SHAPE_COLORS[ TETRIS_SHAPE_L ]        = COLOR_GREEN;
 
     Window* window = malloc( sizeof( Window ) );
     window->window_instance = NULL;
@@ -118,7 +117,7 @@ initGameState( GameState* )
 
     for ( int i = 0; i < BOARD_WIDTH; i++ )
     {
-        for ( int j = 0; j < BOARD_HEIGHT; j++)
+        for ( int j = 0; j < BOARD_HEIGHT; j++ )
         {
             matrixSet( game_state->board, i, j, 0 );
         }
@@ -126,7 +125,8 @@ initGameState( GameState* )
     return game_state;
 }
 
-// Validate if new shape position and rotation is within bounds
+// Validate if new shape position and rotation is within bounds of the board and
+// not colliding with shapes that were already dropped.
 bool
 validateShape( GameState* game_state, int x, int y, TETRIS_ROT tetris_rot )
 {
@@ -135,12 +135,13 @@ validateShape( GameState* game_state, int x, int y, TETRIS_ROT tetris_rot )
 
     for( int coord = 0; coord < coords->rows; coord++ )
     {
-        int new_x = matrixGet( coords, coord, 0 );
-        int new_y = matrixGet( coords, coord, 1 );
-        if( new_x < 0 ||
-            new_y < 0 ||
-            new_x > BOARD_WIDTH - 1 ||
-            new_y > BOARD_HEIGHT - 1 ||
+        const int new_x = matrixGet( coords, coord, 0 );
+        const int new_y = matrixGet( coords, coord, 1 );
+
+        if( new_x < 0                   ||
+            new_y < 0                   ||
+            new_x > BOARD_WIDTH - 1     ||
+            new_y > BOARD_HEIGHT - 1    ||
             matrixGet( game_state->board, new_x, new_y) > 0)
         {
             valid = false;
@@ -152,7 +153,7 @@ validateShape( GameState* game_state, int x, int y, TETRIS_ROT tetris_rot )
     return valid;
 }
 
-// Rotate active piece by 90 deg clockwise
+// Rotate active piece by 90 deg clockwise (if it does not collide).
 void
 rotateShape( GameState* game_state )
 {
@@ -173,12 +174,13 @@ rotateShape( GameState* game_state )
     game_state->active_shape_rot = target_rot;
 }
 
-// Move shape along dx or dy
+// Move shape along dx or dy (if it does not collide). Returns 0 on success
+// and -1 on failure (collision).
 int
 moveShape( GameState* game_state, int dx, int dy )
 {
-    int target_x = game_state->active_shape_x + dx;
-    int target_y = game_state->active_shape_y + dy;
+    const int target_x = game_state->active_shape_x + dx;
+    const int target_y = game_state->active_shape_y + dy;
 
     if( !validateShape( game_state, target_x, target_y, game_state->active_shape_rot ) )
     {
@@ -189,7 +191,7 @@ moveShape( GameState* game_state, int dx, int dy )
     return 0;
 }
 
-// Spawn a new shape
+// Spawn a new shape.
 void
 spawnShape( GameState* game_state )
 {
@@ -199,33 +201,33 @@ spawnShape( GameState* game_state )
     game_state->active_shape_y = 3;
 }
 
-// Freeze shape in place
+// Freeze shape in place on the board.
 void
 freezeShape( GameState* game_state )
 {
-    Matrix* coords = getLocalShapeCells( game_state->active_shape, game_state->active_shape_x,
-        game_state->active_shape_y, game_state->active_shape_rot );
+    Matrix* coords = getLocalShapeCells( game_state->active_shape,
+                                        game_state->active_shape_x,
+                                        game_state->active_shape_y,
+                                        game_state->active_shape_rot );
 
-    for( int coord = 0; coord < coords->rows; coord++)
+    for( int coord = 0; coord < coords->rows; coord++ )
     {
         const int x = matrixGet( coords, coord, 0 );
         const int y = matrixGet( coords, coord, 1 );
-
         matrixSet( game_state->board, x, y, 1 );
     }
 
     free( coords );
 }
 
-// Find full rows, clear them and add to the score
+// Find full rows, clear them and add to the score.
 void
 clearFullRows( GameState* game_state)
 {
-    // Loop all board rows from bottom to top
+    // Loop over all board rows from bottom to top.
     int row = BOARD_HEIGHT - 1;
     while ( row > 0 )
     {
-        // check a single row
         bool is_row_full = true;
         for( int col = 0; col < BOARD_WIDTH; col++ )
         {
@@ -238,14 +240,13 @@ clearFullRows( GameState* game_state)
 
         if (is_row_full)
         {
-
             // Clear this line
             for( int col = 0; col < BOARD_WIDTH; col++ )
             {
                 matrixSet( game_state->board, col, row, 0 );
             }
 
-            // Move upward lines down
+            // Move all lines above 1 row downward
             for( int i = row; i > 1; i-- )
             {
                 for( int j = 0; j < BOARD_WIDTH; j++ )
@@ -289,23 +290,27 @@ drawCell( Window* window, int i, int j, Color color )
     int CELL_SIZE = 20;
     int CELL_PADDING = 1;
 
-    SDL_Rect fillRect = {  100 + i*CELL_PADDING + i*CELL_SIZE,100 + j*CELL_PADDING + j*CELL_SIZE, CELL_SIZE,
-        CELL_SIZE};
+    SDL_Rect fillRect = {   100 + i * CELL_PADDING + i * CELL_SIZE,
+                            100 + j * CELL_PADDING + j * CELL_SIZE,
+                            CELL_SIZE,
+                            CELL_SIZE };
 
     SDL_SetRenderDrawColor( window->renderer, color.r, color.g, color.b, color.a );
     SDL_RenderFillRect( window->renderer, &fillRect );
 }
 
-// Draws a tetris shape in the board at i (height) and j (width) at color
+// Draws a tetris shape in the board at i (height) and j (width) and rotation (tetris_rot).
 void
 drawTetrisShape( Window* window, int tetris_shape, int i, int j, TETRIS_ROT tetris_rot )
 {
     Matrix* m = getLocalShapeCells( tetris_shape, i, j, tetris_rot );
 
-    for( int coord = 0; coord < m->rows; coord++)
+    for( int coord = 0; coord < m->rows; coord++ )
     {
-        drawCell( window, matrixGet( m, coord, 0 ), matrixGet( m, coord, 1 ),
-            SHAPE_COLORS[ tetris_shape ] );
+        drawCell( window,
+                matrixGet( m, coord, 0 ),
+                matrixGet( m, coord, 1 ),
+                SHAPE_COLORS[ tetris_shape ] );
     }
 
     free( m );
@@ -314,28 +319,36 @@ drawTetrisShape( Window* window, int tetris_shape, int i, int j, TETRIS_ROT tetr
 void
 renderTick( GameState* game_state, Window* window )
 {
-    SDL_SetRenderDrawColor( window->renderer, COLOR_DARK.r,  COLOR_DARK.g, COLOR_DARK.b, COLOR_DARK.a);
+    SDL_SetRenderDrawColor( window->renderer,
+                            COLOR_DARK.r,
+                            COLOR_DARK.g,
+                            COLOR_DARK.b,
+                            COLOR_DARK.a);
     SDL_RenderClear( window->renderer );
 
     // Draw board
-    for( int i = 0; i < BOARD_WIDTH; i++)
+    for( int i = 0; i < BOARD_WIDTH; i++ )
     {
-        for( int j = 0; j < BOARD_HEIGHT; j++)
+        for( int j = 0; j < BOARD_HEIGHT; j++ )
         {
             if ( matrixGet( game_state->board, i, j ) == 0)
             {
+                // Empty board cell
                 drawCell( window, i, j, COLOR_BLACK );
             } else
             {
+                // Board cell containing frozen shape
                 drawCell( window, i, j, COLOR_YELLOW );
             }
-
         }
     }
 
-    // Draw active shape
-    drawTetrisShape( window, game_state->active_shape, game_state->active_shape_x, game_state->active_shape_y,
-        game_state->active_shape_rot );
+    // Draw active (player-controlled) shape
+    drawTetrisShape(    window,
+                        game_state->active_shape,
+                        game_state->active_shape_x,
+                        game_state->active_shape_y,
+                        game_state->active_shape_rot );
 
     SDL_RenderPresent( window->renderer );
 }
@@ -413,8 +426,8 @@ int
 chronoGet( Chrono* chrono )
 {
     gettimeofday( &chrono->current_time, NULL );
-    return (chrono->current_time.tv_sec - chrono->start_time.tv_sec) * 1000 +
-        (chrono->current_time.tv_usec - chrono->start_time.tv_usec)/1000;
+    return ( chrono->current_time.tv_sec - chrono->start_time.tv_sec ) * 1000 +
+        ( chrono->current_time.tv_usec - chrono->start_time.tv_usec ) / 1000;
 
 }
 
@@ -428,8 +441,9 @@ chronoReset( Chrono* chrono )
 }
 
 /*
- * Returns true each time the chronometer passes delta_ms and
- * resets the chronometer afterwards (loops the chronometer).
+ * Returns true if called after the chronometer has passed a set amount of time (delta_ms) and resets
+ * the chronometer when it returns true. Can be used in a loop at a higher frequency then 1/delta_ms
+ * for the intent of only invoking a method at frequency 1/delta_ms.
  */
 bool
 chronoTick( Chrono* chrono, int delta_ms )
@@ -449,37 +463,28 @@ chronoTick( Chrono* chrono, int delta_ms )
 void
 loop( Window* window, GameState* game_state )
 {
-    Chrono* chronoFps = chronoStart();
-    Chrono* chronoFpsSampler = chronoStart();
-    Chrono* chronoLogicTick = chronoStart();
-    Chrono* chronoRenderTick = chronoStart();
-    Chrono* chronoInputTick = chronoStart();
+    Chrono* chronoFps           = chronoStart();
+    Chrono* chronoFpsSampler    = chronoStart();
+    Chrono* chronoLogicTick     = chronoStart();
+    Chrono* chronoRenderTick    = chronoStart();
+    Chrono* chronoInputTick     = chronoStart();
+
     do
     {
-        int delta_ms = chronoGet( chronoFps );
-        if( PRINT_FPS && chronoTick( chronoFpsSampler, 1000 ) )
+        if ( PRINT_FPS )
         {
-            printf( "Tick time: %d ms. FPS: %f \n", delta_ms, (float)1000/delta_ms);
-        }
-        chronoReset( chronoFps );
-
-        if( chronoTick( chronoInputTick, INPUT_LOOP_TICK_MS ))
-        {
-            inputTick( game_state );
+            int delta_ms = chronoGet( chronoFps );
+            if( chronoTick( chronoFpsSampler, 1000 ) )
+            {
+                printf( "Tick time: %d ms. FPS: %f \n", delta_ms, (float) 1000 / delta_ms );
+            }
+            chronoReset( chronoFps );
         }
 
         eventTick( game_state );
-
-        if ( chronoTick( chronoLogicTick, LOGIC_LOOP_TICK_MS ) )
-        {
-            logicTick( game_state );
-        }
-
-        if ( chronoTick( chronoRenderTick, RENDER_LOOP_TICK_MS ) )
-        {
-            renderTick( game_state, window );
-        }
-
+        if( chronoTick( chronoInputTick, INPUT_LOOP_TICK_MS ) )     inputTick(  game_state );
+        if( chronoTick( chronoLogicTick, LOGIC_LOOP_TICK_MS ) )     logicTick(  game_state );
+        if( chronoTick( chronoRenderTick, RENDER_LOOP_TICK_MS ) )   renderTick( game_state, window );
 
         SDL_Delay(GAME_LOOP_SLEEP_MS);
 
@@ -508,7 +513,7 @@ initSDL(Window* window)
         SDL_WINDOWPOS_UNDEFINED,
         WINDOW_WIDTH,
         WINDOW_HEIGHT,
-        SDL_WINDOW_SHOWN);
+        SDL_WINDOW_SHOWN );
 
     if( window->window_instance == NULL )
     {
@@ -528,7 +533,7 @@ initSDL(Window* window)
 }
 
 void
-destroySDL(Window* window)
+destroySDL( Window* window )
 {
     SDL_DestroyWindow( window->window_instance );
     SDL_Quit();

@@ -7,9 +7,9 @@
 
 typedef struct Matrix
 {
-    int rows;
-    int cols;
-    int* content;
+    int     rows;
+    int     cols;
+    int*    content;
 } Matrix;
 
 
@@ -23,7 +23,7 @@ void
 matrixSet( const Matrix* matrix, int row, int col, int value );
 
 void
-matrixSets( const Matrix* matrix, ...);
+matrixSets( const Matrix* matrix, ... );
 
 void
 matrixFree( Matrix* matrix );

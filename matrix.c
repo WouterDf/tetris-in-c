@@ -30,7 +30,6 @@ void matrixSet( const Matrix *matrix, const int row, const int col, const int va
         return;
     }
     const int idx = row * matrix->cols + col;
-    // printf("row %i col %i idx %i\n", row, col, idx);
     matrix->content[idx] = value;
 }
 
