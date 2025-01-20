@@ -8,6 +8,8 @@
 /dataSources.local.xml
 
 /cmake-build-debug/
+/build/
+
 /vcs.xml
 /wouter-tetris.iml
 /modules.xml
