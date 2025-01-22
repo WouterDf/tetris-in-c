@@ -38,6 +38,10 @@ typedef struct Color
     uint8_t     a;
 } Color;
 
+typedef int             RESULT;
+#define RESULT_SUCCESS  0;
+#define RESULT_ERROR    -1;
+
 /**************************************************************************
 ** Config
 **************************************************************************/
@@ -52,6 +56,12 @@ typedef struct Color
 #define BOARD_WIDTH             10
 #define BOARD_HEIGHT            20
 #define SCORE_PER_ROW           100
+#define CELL_SIZE_PX            20
+#define CELL_PADDING_PX         1
+#define BOARD_POS_X             20
+#define BOARD_POS_Y             20
+#define SHAPE_SPAWN_X           5
+#define SHAPE_SPAWN_Y           (-1)
 
 /**************************************************************************
 ** Colors
@@ -68,12 +78,25 @@ Color SHAPE_COLORS[ 7 ];
 /**************************************************************************
 ** Forward references
 **************************************************************************/
-int         initSDL();
-void        destroySDL();
-void        loop( Window* window, GameState* game_state );
-GameState*  initGameState();
-int         randomInt( int min, int max );
-
+RESULT          initWindow();
+RESULT          initGameState( GameState* game_state );
+void            destroyWindow();
+void            loop( Window* window, GameState* game_state );
+int             randomInt( int min, int max );
+typedef struct  Chrono Chrono;
+Chrono*         chronoStart();
+int             chronoGet(Chrono* chrono);
+bool            chronoTick(Chrono* chrono, int delta_ms);
+void            chronoReset(Chrono* chrono);
+void            eventTick( GameState* game_state );
+void            inputTick( GameState* game_state );
+void            logicTick( GameState* game_state );
+void            renderTick( GameState* game_state, Window* window );
+TETRIS_SHAPE    randomShape();
+TETRIS_ROT      randomRotation();
+/**************************************************************************
+** Main
+**************************************************************************/
 int
 main()
 {
@@ -85,34 +108,77 @@ main()
     SHAPE_COLORS[ TETRIS_SHAPE_J ]        = COLOR_RED;
     SHAPE_COLORS[ TETRIS_SHAPE_L ]        = COLOR_GREEN;
 
-    Window* window = malloc( sizeof( Window ) );
-    window->window_instance = NULL;
-    window->renderer = NULL;
+    Window*     window              = malloc( sizeof( Window ) );
+    GameState*  game_state     = malloc( sizeof( GameState ) );
 
-    initSDL( window );
-
-    GameState* game_state = initGameState();
+    if( initWindow( window ) < 0 )                  return RESULT_ERROR;
+    if( initGameState( game_state ) < 0)        return RESULT_ERROR;
 
     loop( window, game_state );
 
-    destroySDL( window );
-
+    destroyWindow( window );
     matrixFree( game_state->board );
     free( window );
     free( game_state );
+
+    return RESULT_SUCCESS;
 }
 
 
-GameState*
-initGameState( GameState* )
+/**
+ * Main game loop. Triggers event, logic and render ticks at specific frequencies.
+ */
+void
+loop( Window* window, GameState* game_state )
 {
-    GameState* game_state = malloc( sizeof( GameState ) );
+    Chrono* chronoFps           = chronoStart();
+    Chrono* chronoFpsSampler    = chronoStart();
+    Chrono* chronoLogicTick     = chronoStart();
+    Chrono* chronoRenderTick    = chronoStart();
+    Chrono* chronoInputTick     = chronoStart();
+
+    do
+    {
+        if ( PRINT_FPS )
+        {
+            int delta_ms = chronoGet( chronoFps );
+            if( chronoTick( chronoFpsSampler, 1000 ) )
+            {
+                printf( "Tick time: %d ms. FPS: %f \n", delta_ms, (float) 1000 / delta_ms );
+            }
+            chronoReset( chronoFps );
+        }
+
+        eventTick( game_state );
+        if( chronoTick( chronoInputTick, INPUT_LOOP_TICK_MS ) )     inputTick(  game_state );
+        if( chronoTick( chronoLogicTick, LOGIC_LOOP_TICK_MS ) )     logicTick(  game_state );
+        if( chronoTick( chronoRenderTick, RENDER_LOOP_TICK_MS ) )   renderTick( game_state, window );
+
+        SDL_Delay(GAME_LOOP_SLEEP_MS);
+
+    } while ( game_state->running == true );
+
+    free( chronoFps );
+    free( chronoLogicTick );
+    free( chronoFpsSampler );
+    free( chronoRenderTick );
+    free( chronoInputTick );
+}
+
+
+RESULT
+initGameState( GameState* game_state )
+{
+    if( game_state == NULL )
+    {
+        return RESULT_ERROR ;
+    }
     game_state->running = true;
     game_state->score = 0;
-    game_state->active_shape = TETRIS_SHAPE_T;
-    game_state->active_shape_rot = TETRIS_ROT_0;
-    game_state->active_shape_x = 3;
-    game_state->active_shape_y = 3;
+    game_state->active_shape = randomShape();
+    game_state->active_shape_rot = randomRotation();
+    game_state->active_shape_x = SHAPE_SPAWN_X;
+    game_state->active_shape_y = SHAPE_SPAWN_Y;
     game_state->board = matrixMake( BOARD_WIDTH, BOARD_HEIGHT );
 
     for ( int i = 0; i < BOARD_WIDTH; i++ )
@@ -122,7 +188,8 @@ initGameState( GameState* )
             matrixSet( game_state->board, i, j, 0 );
         }
     }
-    return game_state;
+
+    return RESULT_SUCCESS;
 }
 
 // Validate if new shape position and rotation is within bounds of the board and
@@ -138,11 +205,19 @@ validateShape( GameState* game_state, int x, int y, TETRIS_ROT tetris_rot )
         const int new_x = matrixGet( coords, coord, 0 );
         const int new_y = matrixGet( coords, coord, 1 );
 
+        // Check collision with board bounds. y < 0 is allowed for
+        // spawned blocks.
         if( new_x < 0                   ||
-            new_y < 0                   ||
             new_x > BOARD_WIDTH - 1     ||
-            new_y > BOARD_HEIGHT - 1    ||
-            matrixGet( game_state->board, new_x, new_y) > 0)
+            new_y > BOARD_HEIGHT - 1 )
+        {
+            valid = false;
+            break;
+        }
+
+        // Check for collision with board elements (but only when y > 0 to prevent out
+        // of bounds matrixGet)
+        if( new_y > 0 && matrixGet( game_state->board, new_x, new_y) > 0 )
         {
             valid = false;
             break;
@@ -197,8 +272,8 @@ spawnShape( GameState* game_state )
 {
     game_state->active_shape = randomInt( 0, 6 );
     game_state->active_shape_rot = randomInt( 0, 3 );
-    game_state->active_shape_x = 3;
-    game_state->active_shape_y = 3;
+    game_state->active_shape_x = SHAPE_SPAWN_X;
+    game_state->active_shape_y = SHAPE_SPAWN_Y;
 }
 
 // Freeze shape in place on the board.
@@ -287,13 +362,10 @@ logicTick( GameState* game_state )
 void
 drawCell( Window* window, int i, int j, Color color )
 {
-    int CELL_SIZE = 20;
-    int CELL_PADDING = 1;
-
-    SDL_Rect fillRect = {   100 + i * CELL_PADDING + i * CELL_SIZE,
-                            100 + j * CELL_PADDING + j * CELL_SIZE,
-                            CELL_SIZE,
-                            CELL_SIZE };
+    SDL_Rect fillRect = {   BOARD_POS_X + i * CELL_PADDING_PX + i * CELL_SIZE_PX,
+                            BOARD_POS_Y + j * CELL_PADDING_PX + j * CELL_SIZE_PX,
+                            CELL_SIZE_PX,
+                            CELL_SIZE_PX };
 
     SDL_SetRenderDrawColor( window->renderer, color.r, color.g, color.b, color.a );
     SDL_RenderFillRect( window->renderer, &fillRect );
@@ -307,13 +379,25 @@ drawTetrisShape( Window* window, int tetris_shape, int i, int j, TETRIS_ROT tetr
 
     for( int coord = 0; coord < m->rows; coord++ )
     {
+        const int x = matrixGet( m, coord, 0 );
+        const int y = matrixGet( m, coord, 1 );
+
+        if ( y < 0 )
+        {
+            return;
+        }
         drawCell( window,
-                matrixGet( m, coord, 0 ),
-                matrixGet( m, coord, 1 ),
+                x,
+                y,
                 SHAPE_COLORS[ tetris_shape ] );
     }
 
     free( m );
+}
+
+void
+drawScore( Window* window )
+{
 }
 
 void
@@ -343,6 +427,8 @@ renderTick( GameState* game_state, Window* window )
         }
     }
 
+    drawScore( window );
+
     // Draw active (player-controlled) shape
     drawTetrisShape(    window,
                         game_state->active_shape,
@@ -352,6 +438,8 @@ renderTick( GameState* game_state, Window* window )
 
     SDL_RenderPresent( window->renderer );
 }
+
+
 
 void
 inputTick( GameState* game_state )
@@ -457,54 +545,14 @@ chronoTick( Chrono* chrono, int delta_ms )
     return false;
 }
 
-/**
- * Main game loop. Triggers event, logic and render ticks.
- */
-void
-loop( Window* window, GameState* game_state )
-{
-    Chrono* chronoFps           = chronoStart();
-    Chrono* chronoFpsSampler    = chronoStart();
-    Chrono* chronoLogicTick     = chronoStart();
-    Chrono* chronoRenderTick    = chronoStart();
-    Chrono* chronoInputTick     = chronoStart();
-
-    do
-    {
-        if ( PRINT_FPS )
-        {
-            int delta_ms = chronoGet( chronoFps );
-            if( chronoTick( chronoFpsSampler, 1000 ) )
-            {
-                printf( "Tick time: %d ms. FPS: %f \n", delta_ms, (float) 1000 / delta_ms );
-            }
-            chronoReset( chronoFps );
-        }
-
-        eventTick( game_state );
-        if( chronoTick( chronoInputTick, INPUT_LOOP_TICK_MS ) )     inputTick(  game_state );
-        if( chronoTick( chronoLogicTick, LOGIC_LOOP_TICK_MS ) )     logicTick(  game_state );
-        if( chronoTick( chronoRenderTick, RENDER_LOOP_TICK_MS ) )   renderTick( game_state, window );
-
-        SDL_Delay(GAME_LOOP_SLEEP_MS);
-
-    } while ( game_state->running == true );
-
-    free( chronoFps );
-    free( chronoLogicTick );
-    free( chronoFpsSampler );
-    free( chronoRenderTick );
-    free( chronoInputTick );
-}
-
-int
-initSDL(Window* window)
+RESULT
+initWindow(Window* window)
 {
 
     if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
     {
         printf( "Could not initialize SDL. SDL_Error: %s\n", SDL_GetError() );
-        return -1;
+        return RESULT_ERROR;
     }
 
     window->window_instance = SDL_CreateWindow(
@@ -518,7 +566,7 @@ initSDL(Window* window)
     if( window->window_instance == NULL )
     {
         printf( "Could not initialize Window. SDL_Error: %s\n", SDL_GetError() );
-        return -1;
+        return RESULT_ERROR;
     }
 
     window->renderer = SDL_CreateRenderer( window->window_instance, -1, SDL_RENDERER_ACCELERATED );
@@ -526,14 +574,14 @@ initSDL(Window* window)
     if( window->renderer == NULL )
     {
         printf( "Could not initialize renderer. SDL_Error: %s\n", SDL_GetError() );
-        return -1;
+        return RESULT_ERROR;
     }
 
-    return 0;
+    return RESULT_SUCCESS;
 }
 
 void
-destroySDL( Window* window )
+destroyWindow( Window* window )
 {
     SDL_DestroyWindow( window->window_instance );
     SDL_Quit();
@@ -543,4 +591,16 @@ destroySDL( Window* window )
 int randomInt( int min, int max )
 {
     return rand() % (max - min + 1) + min;
+}
+
+TETRIS_SHAPE
+randomShape()
+{
+    return randomInt( 0, 6 );
+}
+
+TETRIS_ROT
+randomRotation()
+{
+    return randomInt( 0, 3 );
 }
