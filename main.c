@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <SDL.h>
+#include <SDL_ttf.h>
 #include <stdbool.h>
 #include <sys/time.h>
 #include "matrix.h"
