@@ -40,8 +40,8 @@ typedef struct Color
 } Color;
 
 typedef int             RESULT;
-#define RESULT_SUCCESS  0;
-#define RESULT_ERROR    -1;
+#define RESULT_SUCCESS  0
+#define RESULT_ERROR    (-1)
 
 /**************************************************************************
 ** Config
@@ -63,6 +63,8 @@ typedef int             RESULT;
 #define BOARD_POS_Y             20
 #define SHAPE_SPAWN_X           5
 #define SHAPE_SPAWN_Y           (-1)
+#define FONT_PATH               "/Library/Fonts/Arial Unicode.ttf"
+#define FONT_SIZE               24
 
 /**************************************************************************
 ** Colors
@@ -73,8 +75,6 @@ Color COLOR_YELLOW  = { 246,    250,    112,    0xFF };
 Color COLOR_RED     = { 255,    0,      96,     0xFF };
 Color COLOR_GREEN   = { 0,      223,    162,    0xFF };
 Color COLOR_BLUE    = { 0,      121,    255,    0xFF };
-
-Color SHAPE_COLORS[ 7 ];
 
 /**************************************************************************
 ** Forward references
@@ -95,6 +95,13 @@ void            logicTick( GameState* game_state );
 void            renderTick( GameState* game_state, Window* window );
 TETRIS_SHAPE    randomShape();
 TETRIS_ROT      randomRotation();
+
+/**************************************************************************
+** Global variables
+**************************************************************************/
+TTF_Font* Font;
+Color SHAPE_COLORS[ 7 ];
+
 /**************************************************************************
 ** Main
 **************************************************************************/
@@ -396,9 +403,53 @@ drawTetrisShape( Window* window, int tetris_shape, int i, int j, TETRIS_ROT tetr
     free( m );
 }
 
-void
-drawScore( Window* window )
+SDL_Color
+toSDLColor( const Color color )
 {
+    return (SDL_Color){ color.r, color.g, color.b };
+}
+
+void
+drawScore( Window* window, int score )
+{
+    char score_string[7];
+    sprintf( score_string, "%06d", score );
+
+    SDL_Surface* title_message_surface = TTF_RenderText_Shaded(
+        Font,
+    "SCORE:",
+    toSDLColor( COLOR_YELLOW ),
+    toSDLColor( COLOR_DARK ) );
+
+    SDL_Surface* score_message_surface = TTF_RenderText_Shaded(
+        Font,
+        score_string,
+        toSDLColor( COLOR_YELLOW ),
+        toSDLColor( COLOR_DARK ) );
+
+    SDL_Texture* title_message = SDL_CreateTextureFromSurface( window->renderer, title_message_surface );
+    SDL_Texture* score_message = SDL_CreateTextureFromSurface( window->renderer, score_message_surface );
+
+    SDL_Rect title_message_rect;
+    title_message_rect.x = 250;
+    title_message_rect.y = 20;
+    title_message_rect.w = 80;
+    title_message_rect.h = 30;
+
+    SDL_Rect score_message_rect;
+    score_message_rect.x = 250;
+    score_message_rect.y = 60;
+    score_message_rect.w = 80;
+    score_message_rect.h = 30;
+
+    SDL_RenderCopy( window->renderer, title_message, NULL, &title_message_rect );
+    SDL_RenderCopy( window->renderer, score_message, NULL, &score_message_rect );
+
+    SDL_FreeSurface( title_message_surface );
+    SDL_FreeSurface( score_message_surface );
+
+    SDL_DestroyTexture( title_message );
+    SDL_DestroyTexture( score_message );
 }
 
 void
@@ -428,7 +479,7 @@ renderTick( GameState* game_state, Window* window )
         }
     }
 
-    drawScore( window );
+    drawScore( window, game_state->score );
 
     // Draw active (player-controlled) shape
     drawTetrisShape(    window,
@@ -578,12 +629,26 @@ initWindow(Window* window)
         return RESULT_ERROR;
     }
 
+    if( TTF_Init() == RESULT_ERROR )
+    {
+        printf( "Could not initialize SDL_TTF" );
+        return RESULT_ERROR;
+    }
+
+    //this opens a font style and sets a size
+    Font = TTF_OpenFont(FONT_PATH, FONT_SIZE);
+    if (!Font) {
+        printf("TTF_OpenFont: %s\n", TTF_GetError());
+        return RESULT_ERROR;
+    }
+
     return RESULT_SUCCESS;
 }
 
 void
 destroyWindow( Window* window )
 {
+    TTF_Quit();
     SDL_DestroyWindow( window->window_instance );
     SDL_Quit();
 }
